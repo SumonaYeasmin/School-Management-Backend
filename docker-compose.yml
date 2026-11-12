@@ -1,0 +1,57 @@
+services:
+  # ১. নেস্টজেএস ব্যাকএন্ড অ্যাপ্লিকেশন
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development # ডেভেলপমেন্টে লাইভ ওয়াচ মোডের জন্য 'development', প্রোডাকশনে 'production' ব্যবহার করতে পারেন
+    container_name: school_management_app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-rootpassword}@postgres:5432/${POSTGRES_DB:-school_management_db}?schema=public
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # লোকাল কোড পরিবর্তন করলে কন্টেইনারে যাতে সাথে সাথে রিলোড নেয়
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - school-network
+
+  # ২. পোস্টগ্রেস ডাটাবেজ (PostgreSQL)
+  postgres:
+    image: postgres:16-alpine
+    container_name: school_management_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rootpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-school_management_db}
+    ports:
+      # লোকাল মেশিনের অন্যান্য পোস্টগ্রেস পোর্টের (যেমন: 5432, 5433, 5439) সাথে কনফ্লিক্ট এড়াতে 5434 পোর্ট দেওয়া হয়েছে
+      - "${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - school_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-school_management_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - school-network
+
+volumes:
+  school_pgdata:
+    driver: local
+
+networks:
+  school-network:
+    driver: bridge
